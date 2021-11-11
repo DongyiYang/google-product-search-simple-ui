@@ -176,6 +176,10 @@
 }
 
 .navbar-logo {
+  background-image: url('https://www.gstatic.com/devrel-devsite/prod/v0a713fec70a4b4c54311265d5142e962747a0e45a24063467564a2765c008ac7/cloud/images/cloud-logo.svg');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 150px 60px;
   width: 300px;
 }
 

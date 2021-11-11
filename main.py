@@ -4,11 +4,15 @@ import datetime
 import json
 import logging
 import os
+import re
 
 from flask import Flask, render_template, request, send_from_directory
 from google.auth.transport.requests import AuthorizedSession
 from google.cloud import storage
 from google.oauth2 import service_account
+from PIL import Image
+import requests
+from io import BytesIO
 
 from base64 import b64encode
 
@@ -57,13 +61,40 @@ def main():
 
 
 def parse_product_search_request(req):
+  print("request files are: ")
+  print(req.files)
+  print("request form are: ")
+  print(req.form)
   image_file = req.files.get('imageBlob', None)
+  print("image_file is ")
+  print(image_file)
   if not image_file:
-    return 'Invalid image.'
-  try:
-    content = image_file.read()
-  except ValueError:
-    return 'Invalid image file.'
+    
+    image_url = req.form.get('browseImageUrl', '')
+    print("image url is " + image_url)
+    if not image_url:
+      return 'image url is empty'
+    try:
+      response = requests.get(image_url)
+      img = Image.open(BytesIO(response.content))
+      buf = BytesIO()
+      # Save the image as jpeg to the buffer
+      img.save(buf, 'jpeg')
+      # Rewind the buffer's file pointer
+      buf.seek(0)
+      # Read the bytes from the buffer
+      content = buf.read()
+      # Close the buffer
+      buf.close()
+    except (ValueError, TypeError):
+      print("got invalid image: ")
+      print(image_file)
+      return 'Invalid image.'
+  else:
+    try:
+      content = image_file.read()
+    except ValueError:
+      return 'Invalid image file.'
 
   try:
     json_key = json.loads(req.form.get('key', None))
@@ -73,6 +104,10 @@ def parse_product_search_request(req):
   product_set = req.form.get('productSet', '')
   if not product_set:
     return 'Invalid product set.'
+  if product_set.endswith('proj_1'):
+    product_set=product_set.replace('proj_1','mcom')
+  elif product_set.endswith('proj_2'):
+    product_set=product_set.replace('proj_2','thd')
 
   product_category = req.form.get('category', '')
   if not product_category:
@@ -121,6 +156,28 @@ def parse_product_search_request(req):
 
 @app.route('/productSearch', methods=['POST'])
 def product_search():
+  result = parse_product_search_request(request)
+  if type(result) == type(''):
+    return _Error(result)
+  try:
+    (json_key, endpoint, product_search_request_json) = result
+    credentials = service_account.Credentials.from_service_account_info(
+        json_key)
+    scoped_credentials = credentials.with_scopes(_DEFAULT_SCOPES)
+    authed_session = AuthorizedSession(scoped_credentials)
+    url = os.path.join(endpoint, 'images:annotate')
+    response = authed_session.post(
+        url=url, data=json.dumps(product_search_request_json)).json()
+  except Exception as e:
+    return _Error('Internal error: ' + str(e))
+  return json.dumps({
+      'success': True,
+      'response': response,
+  })
+
+
+@app.route('/browse', methods=['POST'])
+def browse():
   result = parse_product_search_request(request)
   if type(result) == type(''):
     return _Error(result)
@@ -216,7 +273,10 @@ def get_operation():
 
 @app.route('/getMatchedImage', methods=['POST'])
 def get_match_image():
-  content = request.get_json()
+  try:
+    content = json.loads(request.get_data())
+  except (ValueError, TypeError):
+    return (_Error('Invalid json content found in request'), False)
   error_or_none = check_key_in_json(content, ['name', 'key', 'endpoint'])
   if error_or_none:
     return error_or_none

@@ -154,7 +154,7 @@ const CopyDomClass = (function() {
 function getEndpoint(env) {
   const map = {
     beta: 'https://vision.googleapis.com/v1p4beta1',
-    prod: 'https://vision.googleapis.com/v1'
+    prod: 'https://test-vision.sandbox.googleapis.com/v1'
   };
   return map[env];
 }
@@ -277,7 +277,7 @@ var SearchImageModel = Backbone.Model.extend({
          endpoint: this.config_model.get('endpoint'),
        }),
        cache: false,
-       contentType: 'application/json',
+       contentType: "application/json; charset=utf-8",
        dataType: 'json',
      }).done(function(response) {
       this.set('image-' + index, response);
@@ -299,7 +299,66 @@ var SearchImageModel = Backbone.Model.extend({
       this.set('error', error);
       return;
     }
-    if (!this.get('image_blob')) {
+    if (!this.get('image_blob') && !this.get('image_for_search_url')) {
+      this.set('error', 'No image file.');
+      return;
+    }
+    console.log("image_blob is " + this.get('image_blob'));
+    if (!this.get('product_set_id')) {
+      this.set('error', 'No product set id.');
+      return;
+    }
+    if (!this.get('product_category')) {
+      this.set('error', 'No product category.');
+      return;
+    }
+    const max_items = this.get('max_items');
+    if (max_items <= 0 || max_items > 200) {
+      this.set('error', 'Max items should be between 1 and 200.');
+      return;
+    }
+    const full_project_set_id = 'projects/' +
+        this.config_model.get('project_id') + '/locations/' +
+        this.config_model.get('location') + '/productSets/' +
+        this.get('product_set_id');
+    var fd = new FormData();
+    fd.append('key', this.config_model.get('key'));
+    fd.append('imageBlob', this.get('image_blob'));
+    fd.append('browseImageUrl', this.get('image_for_search_url'));
+    fd.append('productSet', full_project_set_id);
+    fd.append('category', this.get('product_category'));
+    fd.append('endpoint', this.config_model.get('endpoint'));
+    fd.append('size', max_items);
+    fd.append('boundingPoly', this.get('bounding_poly'));
+    fd.append('model_version', this.get('model_version'));
+
+    $.ajax({
+       type: 'POST',
+       url: 'productSearch',
+       data: fd,
+       processData: false,
+       contentType: false,
+     }).done(function(data) {
+      const json_data = JSON.parse(data);
+      if (json_data.hasOwnProperty('error')) {
+        console.log(json_data['error']);
+      } else if (json_data['response'].hasOwnProperty('error')) {
+        console.log(JSON.stringify(json_data['response']['error']));
+      } else {
+        this.processResponse(json_data['response']);
+      }
+    }.bind(this));
+    console.log('Processing...');
+  },
+
+  browse: function() {
+    this.clear();
+    const error = this.config_model.error();
+    if (error) {
+      this.set('error', error);
+      return;
+    }
+    if (!this.get('image_blob') && !this.get('image_for_search_url')) {
       this.set('error', 'No image file.');
       return;
     }
@@ -323,6 +382,7 @@ var SearchImageModel = Backbone.Model.extend({
     var fd = new FormData();
     fd.append('key', this.config_model.get('key'));
     fd.append('imageBlob', this.get('image_blob'));
+    fd.append('browseImageUrl', this.get('image_for_search_url'));
     fd.append('productSet', full_project_set_id);
     fd.append('category', this.get('product_category'));
     fd.append('endpoint', this.config_model.get('endpoint'));
@@ -332,7 +392,7 @@ var SearchImageModel = Backbone.Model.extend({
 
     $.ajax({
        type: 'POST',
-       url: 'productSearch',
+       url: 'browse',
        data: fd,
        processData: false,
        contentType: false,
@@ -429,6 +489,10 @@ const LeftFrameView = Backbone.View.extend({
     this.location_view = new LocationView();
     this.search_image_view = new SearchImageConfigView();
     this.render();
+  },
+
+  toggle: function() {
+    this.$el.toggle();
   },
 
   hideSearch: function() {
@@ -827,6 +891,7 @@ const DisplaySearchResultView = Backbone.View.extend({
     this.model = exp.search_image_model;
     this.model.on('change:num_matches', this.renderMatchTable, this);
     this.model.on('change:error', this.showError, this);
+    this.canvas_view = exp.canvas_view;
   },
   render: function() {
     return this;
@@ -847,7 +912,7 @@ const DisplaySearchResultView = Backbone.View.extend({
         $('<div>').attr('id', 'match' + index).addClass('one-image');
     const a = $('<a>')
                   .attr('id', 'anchor' + index)
-                  .attr('href', this.getSpinnerUrl())
+                  // .attr('href', this.getSpinnerUrl())
                   .addClass('matched');
     const img = $('<img>')
                     .attr('src', this.getSpinnerUrl())
@@ -859,6 +924,7 @@ const DisplaySearchResultView = Backbone.View.extend({
     // Create metadata display.
     const label = $('<div>').attr('name', 'label').addClass('metadata');
     label.text('Loading...');
+    //  comment out the following to hide label.
     div_one_image.append(label);
     const dataset =
         $('<div>').attr('id', 'dataset' + index).addClass('metadata');
@@ -876,7 +942,7 @@ const DisplaySearchResultView = Backbone.View.extend({
     if (result.score) {
       const score = $('<div>').attr('id', 'score' + index).addClass('metadata');
       score.text('Score: ' + result.score);
-      div_one_image.append(score);
+      // div_one_image.append(score);
     }
     return div_one_image;
   },
@@ -907,8 +973,21 @@ const DisplaySearchResultView = Backbone.View.extend({
       new_image.height = height * scale;
       image.replaceWith(new_image);
     };
-    anchor.attr('href', response.image_url);
-    label.html('#' + (index + 1) + ': ' + response.label);
+    // anchor.attr('href', response.image_url);
+    // label.html('#' + (index + 1) + ': ' + response.label);
+    label.html('#' + (index + 1));
+    console.log("result image rendered!!");
+
+    // Comment out the following to disable browsing.
+    div.click(function() {
+      console.log("image clicked!!");
+      this.canvas_view.renderImageToCanvas(new_image);
+      console.log("image is " + new_image);
+      this.model.set('image_blob', '');
+      this.model.set('image_for_search_url', new_image.src);
+      this.model.browse();
+
+    }.bind(this));
   },
   renderMatchTable: function() {
     const num_matches = this.model.get('num_matches');
@@ -985,6 +1064,7 @@ const RightFrameView = Backbone.View.extend({
   initialize: function() {
     this.index_csv_view = new IndexCsvView();
     this.show_operation_view = new SearchOperationStatusView();
+    this.model = exp.search_image_model;
     this.canvas_view = exp.canvas_view;
     this.render();
   },
@@ -1017,8 +1097,34 @@ const RightFrameView = Backbone.View.extend({
       }
     });
     this.showIndex();
+    this.$('#upload-image').change(this.renderImage.bind(this));
     return this;
-  }
+  },
+
+  showMessage: function(m) {
+    console.log(m);
+  },
+  renderImage: function(e) {
+    const dom = e.target;
+    if (dom.files && dom.files[0]) {
+      this.model.set('image_blob', dom.files[0]);
+      const mimeType = dom.files[0]['type'];
+      if (mimeType.split('/')[0] !== 'image') {
+        this.showMessage('The selected file is not an image...');
+        return;
+      }
+      let reader = new FileReader();
+      reader.onload = function(e) {
+        IMAGE_UPLOADED = new Image();
+        IMAGE_UPLOADED.src = e.target.result;
+        IMAGE_UPLOADED.onload = function() {
+          this.canvas_view.renderImageToCanvas(IMAGE_UPLOADED);
+        }.bind(this);
+        // this.toggleSubmitButton();
+      }.bind(this);
+      reader.readAsDataURL(dom.files[0]);
+    }
+  },
 });
 
 const left_frame_view = new LeftFrameView();
@@ -1030,6 +1136,10 @@ $('#index-nav').click(function() {
 $('#search-nav').click(function() {
   left_frame_view.showSearch();
   right_frame_view.showSearch();
+});
+
+$('.navbar-logo').click(function() {
+  left_frame_view.toggle();
 });
 
 $('.div-radio').click(function(e) {

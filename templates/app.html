@@ -10,8 +10,11 @@
     </head>
     <body>
       <nav class="navbar has-shadow" role="navigation">
-          <div class="navbar-brand"> <div class="navbar-logo"></div> </div>
-          <div class="navbar-menu is-active">
+        <div class="navbar-brand">
+          <div class="navbar-logo">
+          </div>
+        </div>
+        <div class="navbar-menu is-active">
               <div class="navbar-start">
                   <!-- navbar items -->
                   <a class="navbar-item is-hoverable" id="index-nav"> Index </a>
@@ -59,7 +62,7 @@
         <div class="row">
           <input type="text" id="product-set-name" class="width100 input is-small is-primary" placeholder="Provide product set id to search">
         </div>
-        <div class="row">
+        <!-- <div class="row">
           <div class="file is-small is-boxed is-warning">
             <label class="file-label">
               <input id="upload-image" accept="image/*" class="file-input" type="file">
@@ -73,7 +76,7 @@
               </span>
             </label>
           </div>
-        </div>
+        </div> -->
         <div class="row">
           <div>Category:</div>
           <div class="radio-category div-radio"> <input type="radio" name="category" value="homegoods-v2" checked> homegoods</div>
@@ -161,6 +164,19 @@
                 </span>
                 <span>Search</span>
               </a>
+            </div>
+            <div class="file is-small is-boxed is-warning">
+              <label class="file-label">
+                <input id="upload-image" accept="image/*" class="file-input" type="file">
+                <span class="file-cta">
+                  <span class="file-icon">
+                    <i class="fas fa-upload"></i>
+                  </span>
+                  <span class="file-label">
+                    Upload an image to search
+                  </span>
+                </span>
+              </label>
             </div>
             <div class="canvas-container">
               <div id="canvas" height="430" width="440"></div>
